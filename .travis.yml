@@ -1,5 +1,9 @@
 sudo: required
-dist: bionic
+dist: focal
+
+branches:
+  only:
+    - "master"
 
 os: linux
 
@@ -21,6 +25,7 @@ addons:
     - libtest-longstring-perl
     - liblist-moreutils-perl
     - libgd-dev
+  postgresql: "13"
 
 compiler:
   - gcc
@@ -37,19 +42,18 @@ env:
     - NGX_BUILD_JOBS=$JOBS
     - TEST_NGINX_SLEEP=0.006
   matrix:
-    - NGINX_VERSION=1.17.8
-    - NGINX_VERSION=1.19.9
+    - NGINX_VERSION=1.31.8
 
 services:
  - mysql
  - postgresql
 
 install:
-  - if [ ! -f download-cache/drizzle7-2011.07.21.tar.gz ]; then wget -P download-cache/ http://openresty.org/download/drizzle7-2011.07.21.tar.gz; fi
+  - if [ ! -f download-cache/drizzle7-2011.07.21.tar.gz ]; then wget -P download-cache https://github.com/openresty/openresty-deps-prebuild/releases/download/v20230902/drizzle7-2011.07.21.tar.gz; fi
   - git clone https://github.com/openresty/nginx-devel-utils.git
   - git clone https://github.com/openresty/openresty.git ../openresty
   - git clone https://github.com/openresty/no-pool-nginx.git ../no-pool-nginx
-  - git clone https://github.com/simpl/ngx_devel_kit.git ../ndk-nginx-module
+  - git clone https://github.com/openresty/ngx_devel_kit.git ../ndk-nginx-module
   - git clone https://github.com/openresty/test-nginx.git
   - git clone -b v2.1-agentzh https://github.com/openresty/luajit2.git
   - git clone https://github.com/openresty/lua-nginx-module.git ../lua-nginx-module
@@ -64,9 +68,8 @@ install:
   - git clone https://github.com/openresty/openresty.git ../ngx_openresty
 
 before_script:
-  - mysql -uroot -e 'create database ngx_test; grant all on ngx_test.* to "ngx_test"@"%" identified by "ngx_test"; flush privileges;'
-  - mysql -uroot -e 'alter database ngx_test character set utf8mb4 collate utf8mb4_unicode_ci;'
-  - psql -c "create database ngx_test;" -U postgres
+  - mysql -uroot -e "CREATE DATABASE ngx_test CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci; CREATE USER 'ngx_test'@'%' IDENTIFIED WITH mysql_native_password BY 'ngx_test'; GRANT ALL ON ngx_test.* TO 'ngx_test'@'%'; FLUSH PRIVILEGES;"
+  - psql -c "CREATE DATABASE ngx_test WITH ENCODING 'UTF8' LC_COLLATE='C' LC_CTYPE='C' TEMPLATE=template0;" -U postgres
   - psql -c "create user ngx_test with password 'ngx_test';" -U postgres
   - psql -c "grant all privileges on database ngx_test to ngx_test;" -U postgres
 
@@ -77,6 +80,7 @@ script:
   - cd ../luajit2
   - make -j$JOBS CCDEBUG=-g Q= PREFIX=$LUAJIT_PREFIX CC=$CC XCFLAGS='-DLUA_USE_APICHECK -DLUA_USE_ASSERT' > build.log 2>&1 || (cat build.log && exit 1)
   - sudo make install PREFIX=$LUAJIT_PREFIX > build.log 2>&1 || (cat build.log && exit 1)
+  - cpanm --sudo --notest Test::Nginx IPC::Run Test2::Util > build.log 2>&1 || (cat build.log && exit 1)
   - cd ../test-nginx && sudo cpanm . && cd ..
   - export PATH=$PWD/work/nginx/sbin:$PWD/nginx-devel-utils:$PATH
   - export NGX_BUILD_CC=$CC
